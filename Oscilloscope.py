@@ -234,6 +234,9 @@ class Oscilloscope(Instrument, ABC):
     def status(self):
         pass
 
+    # measurement is oscilloscope-dependent and may be implemented in the
+    # derived class if available
+
 
     def _handler_write(self, hclass:HC, *args):
         return self._handler(hclass, True, *args)

@@ -205,6 +205,80 @@ class SDS2000(OS, SocketInstrument):
         super().reset()
 
 
+    def measure_config(self, enable=None, lines=None, style=None):
+        if style is not None:
+            is_style_valid = False
+            if isinstance(style, int):
+                if style>=1 and style<=2:
+                    is_style_valid = True
+                pass
+            elif isinstance(style, str):
+                if (m := re.match(r"^[Mm]?([12])$", style)) is not None:
+                    style = int(m[1])
+                    is_style_valid = True
+
+            if not is_style_valid:
+                raise Exception("Invalid style")
+
+            self.__handler_cmd(True, f":MEAS:ADV:STYL M{style}")
+
+        if lines is not None:
+            if isinstance(lines, int) and lines>=1 and lines<=12:
+                self.__handler_cmd(True, f":MEAS:ADV:LIN {lines}")
+            else:
+                raise Exception("Invalid lines")
+
+        if enable is not None:
+            if isinstance(enable, bool):
+                if enable:
+                    self.__handler_cmd(True, ":MEAS ON")
+                    self.__handler_cmd(True, ":MEAS:MODE ADV")   # only advanced mode is used for instrument control
+                else:
+                    self.__handler_cmd(True, ":MEAS OFF")
+            else:
+                raise Exception("Invalid enable")
+
+    @staticmethod
+    def __get_source(source):
+        if source is None:
+            return None
+        if isinstance(source, int) and source>=1 and source<=4:
+            return f"C{source}"
+        #TODO: other sources as string
+        return None
+
+    def __is_valid_sources(s, s1, s2, invs2=False):
+        b_s = s is not None
+        b_s1 = s1 is not None
+        b_s2 = s2 is not None
+        if invs2:
+            b_s2 = not b_s2
+        return (b_s != b_s1) and b_s2
+
+
+    def set_measure(self, line, type, source=None, source1=None, source2=None):
+        if not isinstance(line, int) and line>=1 and line<=12:
+            raise Exception("Invalid line")
+        # TODO: validate type and determie if dual
+        is_dual = False
+        source = SDS2000.__get_source(source)
+        source1 = SDS2000.__get_source(source1)
+        source2 = SDS2000.__get_source(source2)
+        if is_dual:
+            if not SDS2000.__is_valid_sources(source, source1, source2):
+                raise Exception("Invalid dual source measurement specified")
+        else:
+            if not SDS2000.__is_valid_sources(source, source1, source2, True):
+                raise Exception("Invalid single source measurement specified")
+        #TODO: left off here
+
+
+    def get_measure(self, line):
+        if not isinstance(line, int) and line>=1 and line<=12:
+            raise Exception("Invalid line")
+        return self.__handler_cmd(False, f":MEAS:ADV:P{line}:VAL?")
+
+
     def __process_holdoff(self, write, args):
         # args = holdoff
         if write:
@@ -372,6 +446,7 @@ if __name__ == "__main__":
         oscope.trigger.holdoff = 10.0e-6
         print(oscope.trigger.holdoff)
         print(oscope.trigger.holdoffs)
+        oscope.measure_config(lines=4, style="M2", enable=True)
         oscope.run()
         print(oscope.status)
 
