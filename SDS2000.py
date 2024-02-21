@@ -18,11 +18,91 @@ from SocketInstrument import SocketInstrument
 from InstrumentSettings import StringList
 from HandlerClass import HandlerClass as HC
 from ScaleShift import ScaleShift
+from enum import StrEnum
 import re
 
 # TODO: error out if setting is made without connected instrument
 
 class SDS2000(OS, SocketInstrument):
+
+    # Measurement type class
+    Measure = StrEnum("Measure",
+                   [
+                       "PKPK",
+                       "MAX",
+                       "MIN",
+                       "AMPL",
+                       "TOP",
+                       "BASE",
+                       "LEVELX",
+                       "CMEAN",
+                       "MEAN",
+                       "STDEV",
+                       "VSTD",
+                       "RMS",
+                       "CRMS",
+                       "MEDIAN",
+                       "CMEDIAN",
+                       "OVSN",
+                       "FPRE",
+                       "OVSP",
+                       "RPRE",
+                       "PER",
+                       "FREQ",
+                       "TMAX",
+                       "TMIN",
+                       "PWID",
+                       "NWID",
+                       "DUTY",
+                       "NDUTY",
+                       "WID",
+                       "NBWID",
+                       "DELAY",
+                       "TIMEL",
+                       "RISE",
+                       "FALL",
+                       "RISE10T90",
+                       "FALL90T10",
+                       "CCJ",
+                       "PAREA",
+                       "NAREA",
+                       "AREA",
+                       "ABSAREA",
+                       "CYCLES",
+                       "EDGES",
+                       "REDGES",
+                       "FEDGES",
+                       "PPULSES",
+                       "NPULSES",
+                        "PACArea",
+                        "NACArea",
+                        "ACArea",
+                        "ABSACArea",
+                        "PSLOPE",
+                        "NSLOPE",
+                        "PHA",
+                        "SKEW",
+                        "FRR",
+                        "FRF",
+                        "FFR",
+                        "FFF",
+                        "LRR",
+                        "LRF",
+                        "LFR",
+                        "LFF",
+                        "TSR",
+                        "TSF",
+                        "THR",
+                        "THF"
+                   ]
+                   )
+
+    __Measures_Dual = (
+                    Measure.PHA, Measure.SKEW,
+                    Measure.FRR, Measure.FRF, Measure.FFR, Measure.FFF,
+                    Measure.LRR, Measure.LRF, Measure.LFR, Measure.LFF,
+                    Measure.TSR, Measure.TSF, Measure.THR, Measure.THF
+                )
 
     # INSTRUMENT settings
     __MODES   = [ "YT" ]
@@ -256,11 +336,14 @@ class SDS2000(OS, SocketInstrument):
         return (b_s != b_s1) and b_s2
 
 
-    def set_measure(self, line, type, source=None, source1=None, source2=None):
+    def set_measure(self, line, type, source1=None, source2=None, source=None):
         if not isinstance(line, int) and line>=1 and line<=12:
             raise Exception("Invalid line")
-        # TODO: validate type and determie if dual
         is_dual = False
+        if not isinstance(type, SDS2000.Measure):
+            raise("Invalid source")
+        elif type in SDS2000.__Measures_Dual:
+            is_dual = True
         source = SDS2000.__get_source(source)
         source1 = SDS2000.__get_source(source1)
         source2 = SDS2000.__get_source(source2)
@@ -270,13 +353,29 @@ class SDS2000(OS, SocketInstrument):
         else:
             if not SDS2000.__is_valid_sources(source, source1, source2, True):
                 raise Exception("Invalid single source measurement specified")
-        #TODO: left off here
+            if source1 is None:
+                source1 = source
+
+        self.__handler_cmd(True, f":MEAS:ADV:P{line}:SOUR1 {source1}")
+        if source2 is not None:
+            self.__handler_cmd(True, f":MEAS:ADV:P{line}:SOUR2 {source2}")
+        self.__handler_cmd(True, f":MEAS:ADV:P{line}:TYPE {str(type)}")
 
 
     def get_measure(self, line):
         if not isinstance(line, int) and line>=1 and line<=12:
             raise Exception("Invalid line")
-        return self.__handler_cmd(False, f":MEAS:ADV:P{line}:VAL?")
+        val = self.__handler_cmd(False, f":MEAS:ADV:P{line}:VAL?")
+        # TODO: returns "****" when None (convert to None, may have whitespace)
+        return val
+
+    #TODO: more elegant measure mechanism?
+    #      M(1) = (tuple with settings)
+    #      M(2) = Measure(...)   note will need to change Enum Measure
+    #      val = M(1)
+    #      probably just wrapper get_measure and set_measure
+
+
 
 
     def __process_holdoff(self, write, args):
@@ -447,9 +546,15 @@ if __name__ == "__main__":
         print(oscope.trigger.holdoff)
         print(oscope.trigger.holdoffs)
         oscope.measure_config(lines=4, style="M2", enable=True)
+        M = SDS2000.Measure
+        oscope.set_measure(1, M.PER, 1)
+        oscope.set_measure(2, M.PHA, 1, 2)
         oscope.run()
-        print(oscope.status)
 
+
+
+
+        print(oscope.status)
         print(oscope.model)
     else:
         print("Did not attach to oscope")
